@@ -85,80 +85,49 @@ src/
 - **로컬 개발**: `data/index/` 디렉토리에 `faiss.index`, `metadata.json` 배치
 - **배포**: `DOWNLOAD_INDEX_FROM_S3=true` → 앱 시작 시 S3에서 자동 다운로드
 
-### 테스트
+### 새 라이브러리 추가 시
 
-```bash
-pytest
+새 패키지를 설치했다면 **반드시 `pyproject.toml`에 추가**해야 배포에 반영됩니다.
+
+- 앱 실행에 필요한 패키지 → `dependencies` 에 추가
+- RAG 관련 패키지 → `[project.optional-dependencies]`의 `rag` 에 추가
+
+```toml
+# pyproject.toml
+
+dependencies = [
+    # ... 기존 패키지들
+    "새패키지>=1.0",          # ← 여기에 추가
+]
+
+[project.optional-dependencies]
+rag = [
+    # ... 기존 RAG 패키지들
+    "새RAG패키지>=1.0",       # ← RAG 관련이면 여기에 추가
+]
 ```
 
-## 배포 (CI/CD)
+> Dockerfile은 수정할 필요 없습니다. `pip install ".[rag]"`이 pyproject.toml을 자동으로 읽습니다.
 
-### Step 1: Daehyun(인프라 담당)에게 받아야 할 것
+## 배포 전 로컬 Docker 테스트
 
-| 항목 | 설명 |
-|------|------|
-| AWS Secret Access Key | `toby` IAM 사용자의 Secret Key (대면 전달) |
-| App Runner 서비스 ARN | `rag-qa-api` 서비스의 ARN |
-| MongoDB 접속 정보 | URI, DB명, 방화벽 상태 |
-
-### Step 2: AWS CLI 프로필 설정
-
-```bash
-aws configure --profile rag-qa
-# AWS Access Key ID: Daehyun에게 문의
-# AWS Secret Access Key: Daehyun에게 문의
-# Default region name: ap-northeast-2
-# Default output format: json
-```
-
-검증:
-```bash
-aws sts get-caller-identity --profile rag-qa
-# Account: 355206939988 이 나와야 함
-```
-
-### Step 3: GitHub Secrets 등록
-
-레포 → **Settings** → **Secrets and variables** → **Actions**:
-
-| Secret Name | 값 | 설명 |
-|-------------|-----|------|
-| `AWS_ACCESS_KEY_ID` | Daehyun에게 문의 | AWS IAM Access Key |
-| `AWS_SECRET_ACCESS_KEY` | Daehyun에게 문의 | AWS IAM Secret Key |
-| `APPRUNNER_SERVICE_ARN` | Daehyun에게 문의 | App Runner API 서비스 ARN |
-
-### Step 4: 로컬 Docker 빌드 테스트
+배포 환경과 동일한 조건에서 테스트하려면 [Docker Desktop](https://www.docker.com/products/docker-desktop/)을 설치하고 아래를 실행하세요:
 
 ```bash
 docker build -t rag-api .
 docker run -p 8080:8080 --env-file .env rag-api
-# http://localhost:8080/health 접속 → {"status":"ok"}
+# http://localhost:8080/health → {"status":"ok"} 확인
 ```
 
-### 배포 흐름
+## 배포
 
-```
-main 브랜치에 push (또는 수동 트리거)
-    ↓
-GitHub Actions 실행
-    ↓
-Docker 이미지 빌드
-    ↓
-ECR (rag-api)에 push
-    ↓
-App Runner 자동 재배포
-```
-
-- **main 브랜치에 push하면 자동 배포됩니다**
+- **main 브랜치에 push하면 자동 배포됩니다** (CI/CD는 인프라 담당이 관리)
 - PR을 먼저 만들고 리뷰 후 머지하세요
-- 수동 배포: GitHub → Actions 탭 → Run workflow
 
 ## 주의사항
 
-- **인덱스 파일을 Docker 이미지에 포함하지 마세요** → 런타임에 S3에서 다운로드
-- **시크릿을 코드에 하드코딩하지 마세요** → `.env` 또는 SSM Parameter Store 사용
+- **시크릿을 코드에 하드코딩하지 마세요** → `.env` 사용
 - **`.env` 파일은 절대 커밋하지 마세요** → `.gitignore`에 포함되어 있습니다
-- MongoDB는 GCP Compute Engine에서 운영 중 → 방화벽 설정 확인 필요
 
 ## 관련 레포
 
