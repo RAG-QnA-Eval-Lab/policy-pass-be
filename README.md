@@ -119,10 +119,27 @@ docker run -p 8080:8080 --env-file .env rag-api
 # http://localhost:8080/health → {"status":"ok"} 확인
 ```
 
-## 배포
+## 브랜치 작업 규칙
 
-- **main 브랜치에 push하면 자동 배포됩니다** (CI/CD는 인프라 담당이 관리)
-- PR을 먼저 만들고 리뷰 후 머지하세요
+**main 브랜치에 직접 push하지 마세요.** 반드시 브랜치를 만들어서 작업하고 PR로 머지합니다.
+
+```bash
+# 1. 작업 브랜치 생성
+git checkout -b feature/내작업이름
+
+# 2. 코드 작성 후 커밋
+git add .
+git commit -m "feat: 기능 설명"
+
+# 3. 원격에 push
+git push origin feature/내작업이름
+
+# 4. GitHub에서 PR 생성 → 리뷰 → main에 머지
+```
+
+- 브랜치 이름 예시: `feature/rag-chain`, `fix/api-timeout`, `refactor/retrieval`
+- 머지 전 다른 팀원의 변경사항 반영: `git pull origin main`으로 최신 코드를 받은 뒤 작업하세요
+- **main에 머지되면 자동 배포됩니다** (CI/CD는 인프라 담당이 관리)
 
 ## 주의사항
 
