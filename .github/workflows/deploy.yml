@@ -1,4 +1,4 @@
-name: Deploy API to AWS App Runner
+name: Deploy API to EC2
 
 on:
   push:
@@ -34,7 +34,10 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Deploy to App Runner
-        run: |
-          aws apprunner start-deployment \
-            --service-arn ${{ secrets.APPRUNNER_SERVICE_ARN }}
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: ./deploy.sh
