@@ -1,5 +1,8 @@
 [config]
 model = "gemini/gemini-2.5-flash"
+model_weak = "gemini/gemini-2.5-flash"
+fallback_models = ["gemini/gemini-2.5-flash"]
+output_language = "Korean"
 
 [pr_reviewer]
 require_focused_review = false
