@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     top_k: int = 10
     rerank_top_k: int = 5
+    chat_model: str = "gpt-4o-mini"
+    temperature: float = 0.2
+    max_context_chars: int = 12000
 
     model_config = {"env_file": ".env"}
 

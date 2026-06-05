@@ -1,7 +1,7 @@
 """Policy Pass — FastAPI 백엔드 엔트리포인트.
 
-Vector Search Only (1차): FAISS + OpenAI embedding.
-Lifespan에서 index_loader + retriever를 1회 초기화하여 app.state에 저장.
+Vector Search + RAG Answer Generation.
+Lifespan에서 index + embedder + retriever + generator를 1회 초기화하여 app.state에 저장.
 """
 
 from __future__ import annotations
@@ -17,7 +17,10 @@ from config.settings import settings
 # API routes
 from src.api.routes.rag import router as rag_router
 
-# Retrieval core (vector search only)
+# Generation core (RAG answer)
+from src.generation.generator import OpenAIGenerator
+
+# Retrieval core
 from src.retrieval.embedder import OpenAIEmbedder
 from src.retrieval.index_loader import load_index
 from src.retrieval.retriever import VectorSearchRetriever
@@ -58,10 +61,19 @@ async def lifespan(app: FastAPI):
             embedder.model,
         )
 
+        # 4. Generator (RAG answer generation, OpenAI Chat Completions)
+        generator = OpenAIGenerator(
+            api_key=settings.openai_api_key,
+            model=settings.chat_model,
+            temperature=settings.temperature,
+        )
+        app.state.generator = generator
+        logger.info("RAG generator ready (model=%s)", generator.model)
+
     except Exception as exc:
-        logger.exception("CRITICAL: Vector index initialization failed")
+        logger.exception("CRITICAL: Vector index or RAG generator initialization failed")
         # 앱 시작 실패 (uWSGI / uvicorn이 비정상 종료 처리)
-        raise RuntimeError("Failed to initialize vector search. Check logs and data/index/ files.") from exc
+        raise RuntimeError("Failed to init vector search/RAG generator. Check logs + data/index/.") from exc
 
     yield
 
@@ -72,13 +84,21 @@ async def lifespan(app: FastAPI):
             await retriever.embedder.close()
         except Exception:  # noqa: BLE001
             logger.warning("Failed to close OpenAI embedder", exc_info=True)
+
+    generator = getattr(app.state, "generator", None)
+    if generator and hasattr(generator, "close"):
+        try:
+            await generator.close()
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to close OpenAI generator", exc_info=True)
+
     logger.info("Policy Pass API shutting down")
 
 
 app = FastAPI(
     title="Policy Pass API",
-    description="청년정책 RAG QA 백엔드 (Vector Search Only 1차 구현)",
-    version="0.2.0-vector-search",
+    description="청년정책 RAG QA 백엔드 (Vector Search + RAG Answer Generation)",
+    version="0.3.0-rag-answer",
     lifespan=lifespan,
 )
 
@@ -91,13 +111,13 @@ app.add_middleware(
 )
 
 
-# Vector Search 라우트 등록 ( /api/v1/search )
+# RAG routes 등록 ( /api/v1/search + /api/v1/ask )
 app.include_router(rag_router)
 
 
 @app.get("/health")
 async def health():
-    """기본 헬스체크 + vector index 상태 (lifespan 로드 여부)."""
+    """기본 헬스체크 + vector index 상태 (lifespan 로드 여부). RAG generator는 startup fail-fast로 보장."""
     retriever = getattr(app.state, "retriever", None)
     if retriever is None:
         return {"status": "degraded", "vector_index": "not_loaded"}
@@ -114,6 +134,6 @@ async def health():
 async def root():
     return {
         "message": "Policy Pass API",
-        "version": "0.2.0-vector-search",
-        "endpoints": ["/health", "/api/v1/search"],
+        "version": "0.3.0-rag-answer",
+        "endpoints": ["/health", "/api/v1/search", "/api/v1/ask"],
     }
