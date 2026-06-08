@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     """Vector search 요청.
 
-    query는 최소 1자, 최대 500자. top_k는 1~100으로 제한 (기본은 settings.top_k).
+    query는 최소 1자, 최대 500자. top_k는 1~20으로 제한 (기본은 settings.top_k).
     """
 
     query: str = Field(
