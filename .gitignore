@@ -13,3 +13,11 @@ venv/
 data/index/
 *.index
 .DS_Store
+
+# Final integration artifacts (outputs, eval data, generated metadata)
+outputs/
+*.jsonl
+metadata.pkl
+metadata.json
+data/policies/
+data/eval/

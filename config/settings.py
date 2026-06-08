@@ -14,9 +14,13 @@ class Settings(BaseSettings):
     download_index_from_s3: bool = False
     embedding_model: str = "openai/text-embedding-3-small"
     embedding_dim: int = 1536
+    index_dir: str = "data/index"
     environment: str = "development"
     top_k: int = 10
     rerank_top_k: int = 5
+    chat_model: str = "gpt-4o-mini"
+    temperature: float = 0.2
+    max_context_chars: int = 12000
 
     model_config = {"env_file": ".env"}
 
