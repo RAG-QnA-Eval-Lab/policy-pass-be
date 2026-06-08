@@ -22,6 +22,7 @@ from src.generation.generator import OpenAIGenerator
 
 # Retrieval core
 from src.retrieval.embedder import OpenAIEmbedder
+from src.retrieval.index_downloader import ensure_index_files
 from src.retrieval.index_loader import load_index
 from src.retrieval.retriever import VectorSearchRetriever
 
@@ -30,23 +31,28 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: FAISS 인덱스 + metadata + OpenAI embedder + Retriever 로드.
+    """Startup: (optional S3 download) + FAISS 인덱스 + metadata + OpenAI embedder + Retriever + Generator 로드.
 
+    ensure_index_files() is a no-op for local dev (DOWNLOAD_INDEX_FROM_S3=false).
     실패 시 앱 시작 중단 (fail-fast). production에서 필수.
     """
     logger.info("Policy Pass API starting (env=%s)", settings.environment)
 
     try:
-        # 1. Vector index + metadata (pkl 우선, json fallback, 검증 포함)
+        # 1. (Optional) S3 index download for production. No-op when DOWNLOAD_INDEX_FROM_S3=false.
+        #    Must run before load_index so that local data/index or downloaded path is used.
+        ensure_index_files()
+
+        # 2. Vector index + metadata (pkl 우선, json fallback, 검증 포함)
         index, metadata = load_index()  # sync지만 startup에서 허용
 
-        # 2. Embedder (OpenAI)
+        # 3. Embedder (OpenAI)
         embedder = OpenAIEmbedder(
             api_key=settings.openai_api_key,
             model=settings.embedding_model,
         )
 
-        # 3. Retriever (검색 로직 캡슐화)
+        # 4. Retriever (검색 로직 캡슐화)
         retriever = VectorSearchRetriever(
             index=index,
             metadata=metadata,
@@ -61,7 +67,7 @@ async def lifespan(app: FastAPI):
             embedder.model,
         )
 
-        # 4. Generator (RAG answer generation, OpenAI Chat Completions)
+        # 5. Generator (RAG answer generation via LangChain ChatOpenAI)
         generator = OpenAIGenerator(
             api_key=settings.openai_api_key,
             model=settings.chat_model,

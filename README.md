@@ -7,13 +7,22 @@
 ```
 policy-pass-be/
 ├── src/
-│   └── api/
-│       └── main.py          # FastAPI 엔트리포인트
+│   ├── api/
+│   │   ├── main.py          # FastAPI 엔트리포인트 + lifespan (startup init)
+│   │   ├── chain.py         # LangChain RAG answer chain (build_rag_answer_chain)
+│   │   └── routes/
+│   │       └── rag.py       # POST /api/v1/search, /api/v1/ask
+│   ├── retrieval/           # FAISS in-memory retrieval (embedder, index_loader, retriever, index_downloader)
+│   ├── generation/          # Answer generation wrapper (OpenAIGenerator using LangChain)
+│   ├── services/            # RAGService orchestration (retriever + generator)
+│   └── schemas/             # Pydantic request/response models (stable API contract)
 ├── config/
-│   └── settings.py          # 환경변수 설정
+│   └── settings.py          # 환경변수 설정 (DOWNLOAD_INDEX_FROM_S3, S3_BUCKET 등)
+├── data/index/              # Local FAISS index (faiss.index + metadata.*) for dev
 ├── tests/
+├── scripts/run_qa_samples.py  # QA evaluation runner (calls /ask, writes JSONL)
 ├── Dockerfile               # 컨테이너 빌드 (포트 8080)
-├── pyproject.toml            # 의존성 관리
+├── pyproject.toml            # 의존성 관리 (rag extras: langchain, langchain-openai, faiss-cpu, boto3)
 ├── .env.example              # 환경변수 템플릿
 └── .github/workflows/
     └── deploy.yml            # CI/CD (ECR push → App Runner 배포)
@@ -65,19 +74,15 @@ curl http://localhost:8080/health
 
 ## 개발 가이드
 
-### RAG 체인 구현
+### RAG 체인 구현 (완료된 최종 구조)
 
-`src/api/` 디렉토리에 LangChain 기반 RAG 로직을 추가하세요:
+- `src/api/chain.py`: `build_rag_answer_chain(llm)` — ChatPromptTemplate + StrOutputParser를 사용한 grounded 한국어 RAG 프롬프트 체인.
+- `src/generation/generator.py`: `OpenAIGenerator`가 LangChain `ChatOpenAI` + 위 체인을 래핑 (기존 `generate(question, contexts)` 시그니처 유지).
+- `src/retrieval/`: FAISS in-memory (IndexFlatL2) + OpenAI embedder. `VectorSearchRetriever`는 `/search`와 `/ask` 모두에서 재사용.
+- `src/retrieval/index_downloader.py`: `ensure_index_files()` — production 시 S3에서 인덱스 다운로드 (local에서는 스킵).
+- FastAPI lifespan (`main.py`)에서 S3 다운로드(선택) → index load → embedder/retriever/generator 초기화.
 
-```
-src/
-├── api/
-│   ├── main.py           # FastAPI 앱
-│   ├── routes/           # API 라우트 (/ask, /models 등)
-│   └── chain.py          # LangChain RAG 체인
-├── retrieval/            # FAISS 검색 로직
-└── generation/           # LLM 답변 생성
-```
+API contract는 안정적으로 유지됩니다 (`/api/v1/search`, `/api/v1/ask`).
 
 ### FAISS 인덱스
 
@@ -91,8 +96,8 @@ src/
 > 모델을 변경하려면 GCP 파이프라인에서 인덱스를 리빌드해야 합니다.
 
 - 인덱스는 GCP 파이프라인에서 빌드되어 S3에 저장됩니다
-- **로컬 개발**: `data/index/` 디렉토리에 `faiss.index`, `metadata.json` 배치
-- **배포**: `DOWNLOAD_INDEX_FROM_S3=true` → 앱 시작 시 S3에서 자동 다운로드
+- **로컬 개발**: `data/index/` 디렉토리에 `faiss.index`, `metadata.json` (또는 .pkl) 배치 (git tracked for baseline)
+- **배포 / production**: `DOWNLOAD_INDEX_FROM_S3=true` + `S3_BUCKET=...` → lifespan에서 `ensure_index_files()` 호출 후 S3에서 다운로드하여 설정된 INDEX_DIR (data/index 등) 에 파일을 배치 (settings.index_dir 값 자체는 변경되지 않음). 로컬 data/index는 변경되지 않음.
 
 ### 새 라이브러리 추가 시
 
@@ -127,6 +132,15 @@ docker build -t rag-api .
 docker run -p 8080:8080 --env-file .env rag-api
 # http://localhost:8080/health → {"status":"ok"} 확인
 ```
+
+**로컬 data/index 마운트하여 테스트 (추천, 인덱스 복사 없이):**
+
+```bash
+docker run -p 8080:8080 --env-file .env -v "$PWD/data/index:/app/data/index:ro" rag-api
+# (DOWNLOAD_INDEX_FROM_S3=false 인 경우 로컬 마운트된 인덱스 사용)
+```
+
+production-like S3 다운로드 테스트 시에는 `.env`에 `DOWNLOAD_INDEX_FROM_S3=true`와 `S3_BUCKET`을 설정하세요 (자격증명은 boto3 default chain 사용).
 
 ## 브랜치 작업 규칙
 

@@ -74,7 +74,7 @@ class OpenAIEmbedder:
                 input=text.strip(),
             )
             vec = resp.data[0].embedding
-            if len(vec) != 1536:
+            if len(vec) != expected_dim:
                 raise EmbeddingError(
                     f"Embedding dimension mismatch: expected {expected_dim}, got {len(vec)}"
                 )

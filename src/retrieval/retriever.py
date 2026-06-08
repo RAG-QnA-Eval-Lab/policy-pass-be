@@ -63,7 +63,7 @@ class VectorSearchRetriever:
 
         Args:
             query: 사용자 검색어 (빈 문자열/공백 금지)
-            top_k: 반환할 최대 결과 수 (None이면 default, 1~ntotal로 clamp)
+            top_k: 반환할 최대 결과 수 (None이면 default, 1~20 (API contract)로 clamp)
 
         Returns:
             SearchResult 리스트 (distance 오름차순 = 가장 유사한 순)
@@ -97,17 +97,17 @@ class VectorSearchRetriever:
                 if idx_int < 0 or idx_int >= len(self.metadata):
                     logger.warning("Invalid FAISS index returned: idx=%s", idx_int)
                     continue
-                
+
                 meta = self.metadata[int(idx)]
                 result = SearchResult(
                     policy_id=meta.get("policy_id", ""),
                     title=meta.get("title", ""),
                     content=meta.get("content", ""),
                     category=meta.get("category"),
-                    url=meta.get("url"),
+                    url=meta.get("url") or meta.get("source_url"),
                     last_updated=meta.get("last_updated"),
                     chunk_index=meta.get("chunk_index"),
-                    source=meta.get("source"),
+                    source=meta.get("source") or meta.get("source_name"),
                     distance=float(dist),
                     metadata=meta,  # full 원본 (필요시)
                 )
